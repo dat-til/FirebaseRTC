@@ -38,21 +38,28 @@ async function createRoom() {
   registerPeerConnectionListeners();
 
   // Add code for creating a room here
-  
+  const offer = await peerConnection.createOffer();
+  await peerConnection.setLocalDescription(offer);
+
+  const roomWithOffer = {
+      offer: {
+          type: offer.type,
+          sdp: offer.sdp
+      }
+  }
+  const roomRef = await db.collection('rooms').add(roomWithOffer);
+  const roomId = roomRef.id;
+  console.log(`roomID: ${roomId}`);
+  document.querySelector('#currentRoom').innerText = `Current room is ${roomId} - You are the caller!`;
   // Code for creating room above
-  
+
   localStream.getTracks().forEach(track => {
     peerConnection.addTrack(track, localStream);
   });
 
-  // Code for creating a room below
-
-  // Code for creating a room above
-
   // Code for collecting ICE candidates below
 
   // Code for collecting ICE candidates above
-
   peerConnection.addEventListener('track', event => {
     console.log('Got remote track:', event.streams[0]);
     event.streams[0].getTracks().forEach(track => {
@@ -62,11 +69,27 @@ async function createRoom() {
   });
 
   // Listening for remote session description below
-
+  roomRef.onSnapshot(async snapshot -> {
+      console.log('Got updated room:', snapshot.data());
+      const data = snapshot.data();
+      if (!peerConnection.currentRemoteDescription && data.answer) {
+          console.log('Got remote description: ', data.answer);
+          const answer = new RTCSessionDescription(data.answer)
+          await peerConnection.setRemoteDescription(answer);
+      }
+  });
   // Listening for remote session description above
 
   // Listen for remote ICE candidates below
-
+  roomRef.collection('calleeCandidates').onSnapshot(snapshot => {
+    snapshot.docChanges().forEach(async change => {
+      if (change.type === 'added') {
+        let data = change.doc.data();
+        console.log(`Got new remote ICE candidate: ${JSON.stringify(data)}`);
+        await peerConnection.addIceCandidate(new RTCIceCandidate(data));
+      }
+    });
+  });
   // Listen for remote ICE candidates above
 }
 
